@@ -9,8 +9,7 @@
 #define REGEXMAXLENGTH 20
 
 
-char * createRegex(const char * type, const char * subtype){
-    char * regex = malloc(REGEXMAXLENGTH * sizeof(char));
+void createRegex(const char * type, const char * subtype, char * regex){
     if(strcmp(type, "*") == 0)
         strcpy(regex,"[a-zA-Z]+\\/[a-zA-Z]+");
     else if(strcmp(subtype, "*") == 0){
@@ -22,7 +21,6 @@ char * createRegex(const char * type, const char * subtype){
         strcat(regex, "\\/");
         strcat(regex, subtype);
     }
-    return regex;
 }
 int validateRanges(char ** ranges){
     // TODO: Validate ranges
@@ -30,26 +28,25 @@ int validateRanges(char ** ranges){
 }
 
 regex_t * createRegexCompilersArray(char ** ranges, const int rangesi){
-    char * type = malloc(RANGETYPEMAXLENGTH * sizeof(char)), * subtype = malloc(RANGETYPEMAXLENGTH * sizeof(char));
-    char * regex;
+    char * type , * subtype;
+    char * regex = malloc(REGEXMAXLENGTH * sizeof(char));
     const char * delim = "/";
     regex_t * compiledExp = malloc((rangesi)* sizeof(regex_t));
     int compileFlags;
     for (int i = 0; i < rangesi ; i++) {
         type = strtok(ranges[i], delim);
         subtype = strtok(NULL, delim);
-        regex = createRegex(type, subtype);
-//        fprintf(stdout, strcat(regex, "\n"));
+        createRegex(type, subtype, regex);
         compileFlags = regcomp(&compiledExp[i], regex, REG_EXTENDED);
         if(compileFlags != 0)
-            printf("Error during creating regex compiler: ");
+            fputs("Error during creating regex compiler: ", stdout);
     }
-//    free(type); free(subtype); free(regex);
+    free(regex);
     return compiledExp;
 }
 
-char * getLineFromStdin(){
-    char * buff = malloc(LINEMAXLENGTH * sizeof(char));
+char * getLineFromStdin(char * buff){
+//    char * buff = malloc(LINEMAXLENGTH * sizeof(char));
     if (fgets(buff, LINEMAXLENGTH, stdin) == NULL)
         return NULL; //No input
     if (buff[strlen(buff)-1] != '\n') {
@@ -62,25 +59,33 @@ int checkMalformed(const char * line){
     regex_t * compiled = malloc(sizeof(regex_t));
     regmatch_t * match = malloc(LINEMAXLENGTH * sizeof(regmatch_t));
     compileFlags = regcomp(compiled, "[a-zA-Z]+\\/[a-zA-Z]+(; [a-zA-Z]+=[a-zA-Z0-9]+)?", REG_EXTENDED);
-    if(!regexec(compiled, line, 1, match, REG_EXTENDED) == 0)
+    if(!regexec(compiled, line, 1, match, REG_EXTENDED) == 0) {
+        free(compiled); free(match);
         return 1;   //Malformed
-    else
+    }else {
+        free(compiled); free(match);
         return 0;
+    }
 }
 int validateLine(const char * line, const regex_t * regexCompilersArray, const int rangesi){
     // 1 match / -1 no match / 0 malformed line
     regmatch_t * match = malloc(LINEMAXLENGTH * sizeof(regmatch_t));
-    if(checkMalformed(line))
+    if(checkMalformed(line)) {
+        free(match);
         return 0;
-    for (int i = 0; i < rangesi; ++i) {
-        if(regexec(&regexCompilersArray[i], line, 1, match, REG_EXTENDED) == 0)
-            return 1;   //Match
     }
+    for (int i = 0; i < rangesi; ++i) {
+        if(regexec(&regexCompilersArray[i], line, 1, match, REG_EXTENDED) == 0) {
+            free(match);
+            return 1;   //Match
+        }
+    }
+    free(match);
     return -1;
 }
 int main(int argc, char ** argv){
     const char delim = ',';
-    char * firstToken = malloc(RANGEMAXLENGTH * sizeof(char)), * line = malloc(LINEMAXLENGTH * sizeof(char));
+    char * firstToken, * line = malloc(LINEMAXLENGTH * sizeof(char));
     char ** ranges = malloc(MAXQRANGES* sizeof(char *));
     int rangesi = 0;
 
@@ -95,12 +100,16 @@ int main(int argc, char ** argv){
         exit(0);
     }
     regex_t * regexCompilersArray = createRegexCompilersArray(ranges, rangesi);
-    while(strcmp((line = getLineFromStdin()),"\n") != 0){
+    while(strcmp((line = getLineFromStdin(line)),"\n") != 0){
         switch (validateLine(line, regexCompilersArray, rangesi)){
             case 1:     fputs("true\n", stdout);break;
             case -1:    fputs("false\n", stdout);break;
             default:    fputs("null\n", stdout);break;
         }
     }
+    for (int i = 0; i <rangesi; ++i) {
+        free(ranges[i]);
+    }
+    free(firstToken); free(line); free(ranges); free(regexCompilersArray);
     return 1;
 }
